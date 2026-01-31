@@ -1,65 +1,348 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useRef, useEffect } from "react";
+import { v4 as uuidv4 } from 'uuid'
+import { SendHorizontal,  Bot,  User,  Menu,  Sparkles,  FileText,  Paperclip,  X,  LayoutGrid,  MessageSquare,  Plus,  PanelLeftClose,  PanelLeftOpen,  LogOut} from "lucide-react";
+import {  SignInButton,  UserButton,  SignedIn,  SignedOut,  useUser,  useClerk} from '@clerk/nextjs';
+import {  Tooltip,  TooltipContent,  TooltipProvider,  TooltipTrigger,} from "@/components/ui/tooltip";
+import { extractTextFromFile } from "@/lib/fileToText";
+import axios from "axios";
 
 export default function Home() {
+  const { isSignedIn, user } = useUser();
+  const { signOut } = useClerk();
+  const [messages, setMessages] = useState<{ role: string; content: string; file?: string; fileText?: string }[]>([]);
+  const [dbMessages, setDbMessages] = useState<{ role: string; content: string; }[]>([]);
+  const [inputValue, setInputValue] = useState("");
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = messagesContainerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages]);
+
+  function generateUniqueId(): string {
+    return uuidv4();
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        alert("File size exceeds 5MB limit.");
+        return;
+      }
+      setSelectedFile(file);
+    }
+  };
+
+  const removeFile = () => {
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleNewChat = () => {
+    setCurrentChatId(null);
+    setMessages([]);
+    setDbMessages([]);
+  }
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isSignedIn) return;
+    if (!inputValue.trim() && !selectedFile) return;
+
+    let fileText: string | undefined;
+    if (selectedFile) {
+      setIsExtracting(true);
+      try {
+        fileText = await extractTextFromFile(selectedFile);
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Failed to read document. Try another file.");
+        setIsExtracting(false);
+        return;
+      }
+      setIsExtracting(false);
+    }
+
+    // If no chat exists yet, create one
+    let chatId = currentChatId;
+    if (!chatId) {
+      chatId = generateUniqueId();
+      setCurrentChatId(chatId);
+   
+      // Optional: call backend to create chat row
+      // await createChat({ id: chatId, user_id: user?.id, title: inputValue.slice(0, 40) });
+      const reponse = await axios.post("/api/chat", {
+        chatId: chatId,
+        userId: user?.id,
+        title: inputValue.slice(0,40)
+      });
+    }
+    const newMessage = {
+      role: "user",
+      content: inputValue,
+      file: selectedFile ? selectedFile.name : undefined,
+      fileText: fileText
+    };
+  
+    // Update local messages state
+    setMessages(prev => [...prev, newMessage]);
+    setDbMessages(prev => [...prev, { role: "user", content: inputValue }]);
+    setInputValue("");
+    removeFile();
+
+    // Simulate generic AI response for demo
+    setTimeout(() => {
+      setMessages(prev => [...prev, { role: "assistant", content: "I have received your query and document. This is a simulated response for the frontend prototype." }]);
+    }, 1000);
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <div className="flex h-screen bg-background text-foreground font-sans selection:bg-primary selection:text-primary-foreground overflow-hidden">
+
+      {/* Sidebar */}
+      <aside
+        className={`${isSidebarOpen ? "w-64" : "w-[72px]"
+          } relative flex flex-col border-r border-border bg-card transition-all duration-300 ease-in-out shrink-0`}
+      >
+        <div className="flex h-16 items-center justify-between px-4 border-b border-border/50">
+          <div className={`flex items-center gap-2 overflow-hidden ${!isSidebarOpen && "hidden"}`}>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <FileText className="h-5 w-5 fill-current" />
+            </div>
+            <span className="text-lg font-bold tracking-tight truncate">AskYourDocs</span>
+          </div>
+          <button
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className="rounded-md p-2 hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors ml-auto"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            {isSidebarOpen ? <PanelLeftClose className="h-5 w-5" /> : <PanelLeftOpen className="h-5 w-5" />}
+          </button>
         </div>
-      </main>
+
+        <div className="p-3">
+          <button onClick={handleNewChat}
+            className={`flex w-full items-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 transition-all ${!isSidebarOpen && "justify-center px-0"}`}
+          >
+            <Plus className="h-5 w-5" />
+            {isSidebarOpen && 
+            <span>New Chat</span>}
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          {isSidebarOpen && <h4 className="text-xs font-medium text-muted-foreground px-2 mb-2">Recent Chats</h4>}
+
+          {/* Empty State for Chats */}
+          <div className="flex flex-col items-center justify-center py-8 text-center px-2">
+            <MessageSquare className="h-8 w-8 text-muted-foreground/50 mb-2" />
+            {isSidebarOpen && <p className="text-xs text-muted-foreground">No recent chats</p>}
+          </div>
+        </div>
+
+        {/* User Profile Footer */}
+        <div className="p-3 border-t border-border/50">
+          <SignedIn>
+            <div className={`flex items-center gap-3 rounded-lg p-2 hover:bg-secondary/50 transition-colors ${!isSidebarOpen && "justify-center"}`}>
+              <UserButton
+                appearance={{
+                  elements: {
+                    userButtonAvatarBox: "h-9 w-9 border border-border",
+                    userButtonOuterIdentifier: "hidden"
+                  }
+                }}
+              />
+              {isSidebarOpen && (
+                <div className="flex flex-col overflow-hidden text-left">
+                  <span className="text-sm font-medium truncate">
+                    {user?.fullName || user?.username || "User"}
+                  </span>
+                  <span className="text-xs text-muted-foreground truncate w-32">
+                    {user?.primaryEmailAddress?.emailAddress}
+                  </span>
+                </div>
+              )}
+            </div>
+          </SignedIn>
+          <SignedOut>
+            <div className={`flex justify-center ${isSidebarOpen ? "w-full" : ""}`}>
+              <SignInButton mode="modal">
+                <button
+                  className={`flex items-center gap-2 rounded-lg p-2 hover:bg-secondary transition-colors text-sm font-medium ${isSidebarOpen ? "w-full justify-start" : "justify-center"}`}
+                >
+                  <div className="h-9 w-9 flex items-center justify-center rounded-full bg-secondary">
+                    <LogOut className="h-4 w-4" />
+                  </div>
+                  {isSidebarOpen && <span>Sign In</span>}
+                </button>
+              </SignInButton>
+            </div>
+          </SignedOut>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <div className="flex flex-1 flex-col overflow-hidden relative">
+        {/* Mobile Header / Top Bar */}
+        <header className="flex h-16 w-full items-center justify-between border-b border-border bg-background px-6 shrink-0">
+          <div className="flex items-center gap-3">
+            {!isSidebarOpen && (
+              <div className="flex items-center gap-3 group cursor-pointer animate-in fade-in zoom-in duration-300">
+                <div className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg bg-primary text-primary-foreground">
+                  <FileText className="h-5 w-5 fill-current" />
+                </div>
+                <span className="text-lg font-bold tracking-tight">AskYourDocs</span>
+              </div>
+            )}
+            {isSidebarOpen && <span className="text-sm text-muted-foreground">New Chat</span>}
+          </div>
+        </header>
+
+        {/* Chat Area */}
+        <main className="flex-1 overflow-hidden relative flex flex-col">
+          {/* Messages */}
+          <div ref={messagesContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide p-4 md:p-8 space-y-6 scroll-smooth">
+            {messages.length === 0 && (
+              <div className="flex h-full flex-col items-center justify-center text-center opacity-50">
+                <FileText className="mb-4 h-16 w-16 text-muted-foreground" />
+                <h3 className="text-2xl font-bold tracking-tight">Ask anything about your documents</h3>
+                <p className="text-base text-muted-foreground mt-2 max-w-lg">Upload a file to get started or type a query below to explore your data.</p>
+              </div>
+            )}
+
+            {messages.map((msg, idx) => (
+              <div
+                key={idx}
+                className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-4 duration-500`}
+              >
+                <div className={`flex max-w-[90%] md:max-w-[80%] gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+
+                  {/* Avatar */}
+                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border shadow-sm ${msg.role === 'user' ? 'bg-foreground text-background border-transparent' : 'bg-card border-border'}`}>
+                    {msg.role === 'user' ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4 text-primary" />}
+                  </div>
+
+                  {/* Bubble */}
+                  <div className={`group relative rounded-2xl px-5 py-3.5 text-sm leading-relaxed shadow-sm ${msg.role === 'user'
+                    ? 'bg-primary text-primary-foreground rounded-tr-sm'
+                    : 'bg-card text-card-foreground border border-border rounded-tl-sm'
+                    }`}>
+                    {msg.file && (
+                      <div className="mb-2 flex items-center gap-2 rounded-lg bg-black/10 dark:bg-white/10 p-2 text-xs font-mono">
+                        <FileText className="h-3 w-3" />
+                        {msg.file}
+                      </div>
+                    )}
+                    {msg.content}
+                    {msg.role === 'assistant' && (
+                      <div className="absolute -bottom-5 left-0 opacity-0 transition-opacity group-hover:opacity-100 flex gap-2">
+                        <button className="text-[10px] text-muted-foreground hover:text-foreground">Copy</button>
+                        <button className="text-[10px] text-muted-foreground hover:text-foreground">Regenerate</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+            <div className="h-4" /> {/* Spacer */}
+          </div>
+
+          {/* Input Area */}
+          <div className="w-full p-4 md:p-6 bg-background border-t border-border/50">
+            <div className="mx-auto max-w-2xl w-full">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className={`relative ${!isSignedIn || isExtracting ? "cursor-not-allowed opacity-60" : ""}`}>
+                      <form onSubmit={handleSendMessage} className={`relative group ${!isSignedIn || isExtracting ? "pointer-events-none" : ""}`}>
+
+                        {/* File Preview */}
+                        {selectedFile && (
+                          <div className="absolute -top-14 left-0 right-0 animate-in slide-in-from-bottom-2 fade-in duration-200">
+                            <div className="flex items-center gap-2 rounded-xl border border-border bg-card p-2 pr-3 shadow-sm w-fit">
+                              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                                <FileText className="h-4 w-4" />
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-xs font-medium truncate max-w-[150px]">{selectedFile.name}</span>
+                                <span className="text-[10px] text-muted-foreground">{(selectedFile.size / 1024).toFixed(0)} KB</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={removeFile}
+                                className="ml-2 rounded-full p-1 hover:bg-secondary transition-colors"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="absolute inset-0 -m-0.5 rounded-2xl bg-linear-to-r from-primary/50 to-purple-500/50 opacity-20 transition-opacity group-hover:opacity-100 blur-sm" />
+                        <div className="relative flex items-end gap-2 rounded-2xl border border-border bg-card p-2 shadow-sm focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 transition-all">
+
+                          <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleFileChange}
+                            accept=".pdf,.docx,.md"
+                            className="hidden"
+                            disabled={!isSignedIn}
+                          />
+
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={!isSignedIn}
+                            className="flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed"
+                          >
+                            <Paperclip className="h-5 w-5" />
+                          </button>
+
+                          <input
+                            type="text"
+                            value={inputValue}
+                            onChange={(e) => setInputValue(e.target.value)}
+                            placeholder={isSignedIn ? "Ask your docs..." : "Sign in to chat..."}
+                            disabled={!isSignedIn}
+                            className="flex-1 bg-transparent px-2 py-2.5 text-sm font-medium placeholder:text-muted-foreground/70 focus:outline-none font-mono disabled:cursor-not-allowed"
+                          />
+
+                          <button
+                            type="submit"
+                            disabled={!isSignedIn || isExtracting || (!inputValue.trim() && !selectedFile)}
+                            className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md transition-all hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 active:scale-95"
+                            title={isExtracting ? "Reading document…" : undefined}
+                          >
+                            {isExtracting ? (
+                              <span className="text-xs font-medium">…</span>
+                            ) : (
+                              <SendHorizontal className="h-5 w-5" />
+                            )}
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </TooltipTrigger>
+                  {!isSignedIn && (
+                    <TooltipContent>
+                      <p>Please sign in to send messages</p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              </TooltipProvider>
+              <div className="mt-2 text-center text-[10px] text-muted-foreground">
+                AI can make mistakes. Please verify important information.
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

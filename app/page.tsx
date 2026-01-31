@@ -16,11 +16,13 @@ export default function Home() {
   const [inputValue, setInputValue] = useState("");
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isExtracting, setIsExtracting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [recentChats, setRecentChats] = useState<{ title: string }[]>([]);
+  const [reFetchRecentChats, setReFetchRecentChats] = useState<boolean>(false);
 
 
   const fetchRecentChats = async () => {
@@ -40,7 +42,7 @@ export default function Home() {
 
   useEffect(() => {
     fetchRecentChats();
-  }, []);
+  }, [reFetchRecentChats]);
 
 
   function generateUniqueId(): string {
@@ -67,6 +69,7 @@ export default function Home() {
     setCurrentChatId(null);
     setMessages([]);
     setDbMessages([]);
+    setReFetchRecentChats(true);
   }
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,15 +95,11 @@ export default function Home() {
       chatId = generateUniqueId();
       setCurrentChatId(chatId);
 
-      // Optional: call backend to create chat row
-      // await createChat({ id: chatId, user_id: user?.id, title: inputValue.slice(0, 40) });
       const response = await axios.post("/api/addChat", {
         id: chatId,
         user_id: user?.id,
         title: inputValue.slice(0, 40)
       });
-
-      console.log("Response : ", response);
     }
     const newMessage = {
       role: "user",
@@ -109,16 +108,75 @@ export default function Home() {
       fileText: fileText
     };
 
+    // Capture inputValue before clearing it
+    const currentInput = inputValue;
+
     // Update local messages state
     setMessages(prev => [...prev, newMessage]);
     setDbMessages(prev => [...prev, { role: "user", content: inputValue }]);
     setInputValue("");
     removeFile();
 
-    // Simulate generic AI response for demo
-    setTimeout(() => {
-      setMessages(prev => [...prev, { role: "assistant", content: "I have received your query and document. This is a simulated response for the frontend prototype." }]);
-    }, 1000);
+    const addDoc = async () => {
+      const response = await axios.post("http://127.0.0.1:8000/add", null, {
+        params: {
+          text: fileText,
+          chat_id: chatId,
+          user_id: user?.id
+        }
+      });
+      console.log(response.data);
+    };
+
+    const queryDoc = async () => {
+      try {
+        const params = new URLSearchParams({
+          q: currentInput,
+          user_id: user?.id ?? "",
+        });
+
+        if (chatId) {
+          params.append("chat_id", chatId);
+        }
+
+        const response = await fetch(
+          `http://127.0.0.1:8000/query?${params.toString()}`,
+          { method: "POST" }
+        );
+
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        let fullText = "";
+
+        setMessages(prev => [...prev, { role: "assistant", content: "" }]);
+
+        while (reader) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          fullText += decoder.decode(value, { stream: true });
+
+          setMessages(prev => [
+            ...prev.slice(0, -1),
+            { role: "assistant", content: fullText },
+          ]);
+        }
+      } catch (error) {
+        console.error(error);
+        setMessages(prev => [
+          ...prev,
+          { role: "assistant", content: "Something went wrong. Please try again." },
+        ]);
+      }
+    };
+
+
+    if (fileText) {
+      await addDoc();
+    }
+    // setIsLoading(true);
+    await queryDoc();
+    // setIsLoading(false);
   };
 
   return (
@@ -158,7 +216,7 @@ export default function Home() {
           {isSidebarOpen && <h4 className="text-xs font-medium text-muted-foreground px-2 mb-2">Recent Chats</h4>}
 
           {/* Empty State for Chats */}
-          {recentChats.length === 0 || !isSidebarOpen? (
+          {recentChats.length === 0 || !isSidebarOpen ? (
             <div className="flex flex-col items-center justify-center py-8 text-center px-2">
               <MessageSquare className="h-8 w-8 text-muted-foreground/50 mb-2" />
               {isSidebarOpen && (
@@ -272,16 +330,36 @@ export default function Home() {
                       </div>
                     )}
                     {msg.content}
-                    {msg.role === 'assistant' && (
-                      <div className="absolute -bottom-5 left-0 opacity-0 transition-opacity group-hover:opacity-100 flex gap-2">
-                        <button className="text-[10px] text-muted-foreground hover:text-foreground">Copy</button>
-                        <button className="text-[10px] text-muted-foreground hover:text-foreground">Regenerate</button>
+                    {msg.role === "assistant" && msg.content === "" ? (
+                      <div className="flex gap-1.5 items-center h-4">
+                        <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce" />
+                        <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: "150ms" }} />
+                        <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: "300ms" }} />
                       </div>
+                    ) : (
+                      msg.content
                     )}
+
                   </div>
                 </div>
               </div>
             ))}
+            {/* {isLoading && (
+              <div className="flex w-full justify-start animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="flex max-w-[80%] gap-4 flex-row">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border shadow-sm bg-card border-border">
+                    <Bot className="h-4 w-4 text-primary" />
+                  </div>
+                  <div className="rounded-2xl rounded-tl-sm px-5 py-3.5 bg-card border border-border shadow-sm">
+                    <div className="flex gap-1.5 items-center h-4">
+                      <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: "0ms" }} />
+                      <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: "150ms" }} />
+                      <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: "300ms" }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )} */}
             <div className="h-4" /> {/* Spacer */}
           </div>
 

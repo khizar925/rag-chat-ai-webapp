@@ -2,9 +2,9 @@
 
 import { useState, useRef, useEffect } from "react";
 import { v4 as uuidv4 } from 'uuid'
-import { SendHorizontal,  Bot,  User,  Menu,  Sparkles,  FileText,  Paperclip,  X,  LayoutGrid,  MessageSquare,  Plus,  PanelLeftClose,  PanelLeftOpen,  LogOut} from "lucide-react";
-import {  SignInButton,  UserButton,  SignedIn,  SignedOut,  useUser,  useClerk} from '@clerk/nextjs';
-import {  Tooltip,  TooltipContent,  TooltipProvider,  TooltipTrigger,} from "@/components/ui/tooltip";
+import { SendHorizontal, Bot, User, Menu, Sparkles, FileText, Paperclip, X, LayoutGrid, MessageSquare, Plus, PanelLeftClose, PanelLeftOpen, LogOut } from "lucide-react";
+import { SignInButton, UserButton, SignedIn, SignedOut, useUser, useClerk } from '@clerk/nextjs';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, } from "@/components/ui/tooltip";
 import { extractTextFromFile } from "@/lib/fileToText";
 import axios from "axios";
 
@@ -20,11 +20,28 @@ export default function Home() {
   const [isExtracting, setIsExtracting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const [recentChats, setRecentChats] = useState<{ title: string }[]>([]);
+
+
+  const fetchRecentChats = async () => {
+    try {
+      const response = await axios.get("/api/chat");
+      setRecentChats(response.data);
+    } catch (err) {
+      console.error("Failed to fetch chats", err);
+    }
+  };
+
 
   useEffect(() => {
     const el = messagesContainerRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages]);
+
+  useEffect(() => {
+    fetchRecentChats();
+  }, []);
+
 
   function generateUniqueId(): string {
     return uuidv4();
@@ -74,14 +91,16 @@ export default function Home() {
     if (!chatId) {
       chatId = generateUniqueId();
       setCurrentChatId(chatId);
-   
+
       // Optional: call backend to create chat row
       // await createChat({ id: chatId, user_id: user?.id, title: inputValue.slice(0, 40) });
-      const reponse = await axios.post("/api/chat", {
-        chatId: chatId,
-        userId: user?.id,
-        title: inputValue.slice(0,40)
+      const response = await axios.post("/api/addChat", {
+        id: chatId,
+        user_id: user?.id,
+        title: inputValue.slice(0, 40)
       });
+
+      console.log("Response : ", response);
     }
     const newMessage = {
       role: "user",
@@ -89,7 +108,7 @@ export default function Home() {
       file: selectedFile ? selectedFile.name : undefined,
       fileText: fileText
     };
-  
+
     // Update local messages state
     setMessages(prev => [...prev, newMessage]);
     setDbMessages(prev => [...prev, { role: "user", content: inputValue }]);
@@ -130,8 +149,8 @@ export default function Home() {
             className={`flex w-full items-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 transition-all ${!isSidebarOpen && "justify-center px-0"}`}
           >
             <Plus className="h-5 w-5" />
-            {isSidebarOpen && 
-            <span>New Chat</span>}
+            {isSidebarOpen &&
+              <span>New Chat</span>}
           </button>
         </div>
 
@@ -139,10 +158,24 @@ export default function Home() {
           {isSidebarOpen && <h4 className="text-xs font-medium text-muted-foreground px-2 mb-2">Recent Chats</h4>}
 
           {/* Empty State for Chats */}
-          <div className="flex flex-col items-center justify-center py-8 text-center px-2">
-            <MessageSquare className="h-8 w-8 text-muted-foreground/50 mb-2" />
-            {isSidebarOpen && <p className="text-xs text-muted-foreground">No recent chats</p>}
-          </div>
+          {recentChats.length === 0 || !isSidebarOpen? (
+            <div className="flex flex-col items-center justify-center py-8 text-center px-2">
+              <MessageSquare className="h-8 w-8 text-muted-foreground/50 mb-2" />
+              {isSidebarOpen && (
+                <p className="text-xs text-muted-foreground">No recent chats</p>
+              )}
+            </div>
+          ) : (
+            recentChats.map((chat, index) => (
+              <button
+                key={index}
+                className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-secondary transition-colors truncate"
+              >
+                {chat.title}
+              </button>
+            ))
+          )}
+
         </div>
 
         {/* User Profile Footer */}

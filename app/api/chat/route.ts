@@ -1,25 +1,21 @@
-//api/addChat
+//api/chat
 
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from "@clerk/nextjs/server";
 import { supabaseAdmin } from '@/lib/supabase';
 
-export async function POST(request: NextRequest) {
+export async function GET(request: NextRequest) {
     try {
-        const body = await request.json();
-        const { id, user_id, title } = body;
+        const { userId } = await auth();
 
-        if (!id || !user_id || !title) {
-            return NextResponse.json(
-                { error: 'Missing required fields: id, user_id, title' },
-                { status: 400 }
-            );
+        if (!userId) {
+            return new Response("Unauthorized", { status: 401 });
         }
 
         const { data, error } = await supabaseAdmin
             .from('chats')
-            .insert({ id: id, user_id: user_id, title })
-            .select()
-            .single();
+            .select('title')
+            .eq("user_id",userId);
 
         if (error) {
             console.error('Supabase error:', error);

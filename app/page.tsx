@@ -74,8 +74,8 @@ export default function Home() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        setError("File size exceeds 5MB limit.");
+      if (file.size > 1 * 1024 * 1024) {
+        setError("File size exceeds 1MB limit.");
         return;
       }
       setSelectedFile(file);

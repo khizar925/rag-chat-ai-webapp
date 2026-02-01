@@ -31,7 +31,7 @@ export default function Home() {
       return () => clearTimeout(timer);
     }
   }, [error]);
-  
+
 
 
   const fetchRecentChats = async () => {
@@ -410,7 +410,7 @@ export default function Home() {
                   <TooltipTrigger asChild>
                     <div className={`relative ${!isSignedIn || isExtracting ? "cursor-not-allowed opacity-60" : ""}`}>
                       <form onSubmit={handleSendMessage} className={`relative group ${!isSignedIn || isExtracting ? "pointer-events-none" : ""}`}>
-                        
+
                         <div className="absolute bottom-full left-0 right-0 flex flex-col gap-2 pb-2 pointer-events-none">
                           {/* Error Message */}
                           {error && (

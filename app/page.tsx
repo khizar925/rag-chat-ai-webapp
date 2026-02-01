@@ -176,6 +176,16 @@ export default function Home() {
 
         setIsLoading(false);
 
+        // If the API route returned an error, show it instead of streaming
+        if (!response.ok) {
+          const errorData = await response.json();
+          setMessages(prev => [
+            ...prev,
+            { role: "assistant", content: errorData.detail || errorData.error || "Something went wrong." },
+          ]);
+          return;
+        }
+
         const reader = response.body?.getReader();
         const decoder = new TextDecoder();
         let fullText = "";

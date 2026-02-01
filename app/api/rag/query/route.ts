@@ -1,6 +1,10 @@
 // api/rag/query/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 
+export const config = {
+    runtime: 'edge', // Edge runtime supports streaming better than serverless
+};
+
 export async function POST(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
@@ -10,37 +14,46 @@ export async function POST(request: NextRequest) {
 
         const backendUrl = process.env.RAG_API_URL;
         if (!backendUrl) {
+            console.error('[RAG] RAG_API_URL is not set');
             return NextResponse.json({ error: 'RAG_API_URL not configured' }, { status: 500 });
         }
 
-        // Construct the URL with query parameters for the backend
         const backendParams = new URLSearchParams();
         if (q) backendParams.append('q', q);
         if (user_id) backendParams.append('user_id', user_id);
         if (chat_id) backendParams.append('chat_id', chat_id);
 
-        const response = await fetch(`${backendUrl}/query?${backendParams.toString()}`, {
+        const fullUrl = `${backendUrl}/query?${backendParams.toString()}`;
+        console.log('[RAG] Fetching:', fullUrl);
+
+        const response = await fetch(fullUrl, {
             method: 'POST',
-            // Forward headers if necessary, or just minimal ones
+            signal: AbortSignal.timeout(60000), // 60 second timeout
         });
 
+        console.log('[RAG] Backend status:', response.status);
+
         if (!response.ok) {
-            throw new Error(`Backend responded with ${response.status}`);
+            const errorText = await response.text();
+            console.error('[RAG] Backend error:', response.status, errorText);
+            return NextResponse.json(
+                { error: `Backend error: ${response.status}`, detail: errorText },
+                { status: response.status }
+            );
         }
 
-        // Return the stream directly
+        // Stream the response body directly back to the client
         return new NextResponse(response.body, {
-            status: response.status,
+            status: 200,
             headers: {
                 'Content-Type': 'text/plain',
-                'Transfer-Encoding': 'chunked',
             },
         });
 
     } catch (error: any) {
-        console.error('Error forwarding to RAG backend:', error);
+        console.error('[RAG] Fetch failed:', error.message);
         return NextResponse.json(
-            { error: 'Failed to query RAG backend' },
+            { error: 'Failed to query RAG backend', detail: error.message },
             { status: 500 }
         );
     }

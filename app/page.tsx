@@ -21,8 +21,17 @@ export default function Home() {
   const [isExtracting, setIsExtracting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const [recentChats, setRecentChats] = useState<{ title: string }[]>([]);
+  const [recentChats, setRecentChats] = useState<{ id: string, title: string }[]>([]);
   const [reFetchRecentChats, setReFetchRecentChats] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => setError(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+  
 
 
   const fetchRecentChats = async () => {
@@ -31,6 +40,19 @@ export default function Home() {
       setRecentChats(response.data);
     } catch (err) {
       console.error("Failed to fetch chats", err);
+    }
+  };
+
+  const loadChat = async (chatId: string) => {
+    try {
+      setIsLoading(true);
+      setCurrentChatId(chatId);
+      const response = await axios.get(`/api/getMessages?chatId=${chatId}`);
+      setMessages(response.data);
+      setIsLoading(false);
+    } catch (err) {
+      console.error("Failed to load messages", err);
+      setIsLoading(false);
     }
   };
 
@@ -53,7 +75,7 @@ export default function Home() {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
-        alert("File size exceeds 5MB limit.");
+        setError("File size exceeds 5MB limit.");
         return;
       }
       setSelectedFile(file);
@@ -82,7 +104,7 @@ export default function Home() {
       try {
         fileText = await extractTextFromFile(selectedFile);
       } catch (err) {
-        alert(err instanceof Error ? err.message : "Failed to read document. Try another file.");
+        setError(err instanceof Error ? err.message : "Failed to read document. Try another file.");
         setIsExtracting(false);
         return;
       }
@@ -100,6 +122,7 @@ export default function Home() {
         user_id: user?.id,
         title: inputValue.slice(0, 40)
       });
+      setReFetchRecentChats(prev => !prev);
     }
     const newMessage = {
       role: "user",
@@ -114,16 +137,23 @@ export default function Home() {
     // Update local messages state
     setMessages(prev => [...prev, newMessage]);
     setDbMessages(prev => [...prev, { role: "user", content: inputValue }]);
+
+    if (chatId) {
+      await axios.post("/api/addMessage", {
+        chat_id: chatId,
+        role: "user",
+        content: inputValue
+      });
+    }
+
     setInputValue("");
     removeFile();
 
     const addDoc = async () => {
-      const response = await axios.post("http://127.0.0.1:8000/add", null, {
-        params: {
-          text: fileText,
-          chat_id: chatId,
-          user_id: user?.id
-        }
+      const response = await axios.post("/api/rag/add", {
+        text: fileText,
+        chat_id: chatId,
+        user_id: user?.id
       });
       console.log(response.data);
     };
@@ -140,9 +170,11 @@ export default function Home() {
         }
 
         const response = await fetch(
-          `http://127.0.0.1:8000/query?${params.toString()}`,
+          `/api/rag/query?${params.toString()}`,
           { method: "POST" }
         );
+
+        setIsLoading(false);
 
         const reader = response.body?.getReader();
         const decoder = new TextDecoder();
@@ -161,8 +193,17 @@ export default function Home() {
             { role: "assistant", content: fullText },
           ]);
         }
+
+        if (chatId && fullText) {
+          await axios.post("/api/addMessage", {
+            chat_id: chatId,
+            role: "assistant",
+            content: fullText
+          });
+        }
       } catch (error) {
         console.error(error);
+        setIsLoading(false);
         setMessages(prev => [
           ...prev,
           { role: "assistant", content: "Something went wrong. Please try again." },
@@ -174,9 +215,8 @@ export default function Home() {
     if (fileText) {
       await addDoc();
     }
-    // setIsLoading(true);
+    setIsLoading(true);
     await queryDoc();
-    // setIsLoading(false);
   };
 
   return (
@@ -227,7 +267,8 @@ export default function Home() {
             recentChats.map((chat, index) => (
               <button
                 key={index}
-                className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-secondary transition-colors truncate"
+                onClick={() => loadChat(chat.id)}
+                className={`w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-secondary transition-colors truncate ${currentChatId === chat.id ? 'bg-secondary' : ''}`}
               >
                 {chat.title}
               </button>
@@ -290,7 +331,6 @@ export default function Home() {
                 <span className="text-lg font-bold tracking-tight">AskYourDocs</span>
               </div>
             )}
-            {isSidebarOpen && <span className="text-sm text-muted-foreground">New Chat</span>}
           </div>
         </header>
 
@@ -329,7 +369,6 @@ export default function Home() {
                         {msg.file}
                       </div>
                     )}
-                    {msg.content}
                     {msg.role === "assistant" && msg.content === "" ? (
                       <div className="flex gap-1.5 items-center h-4">
                         <span className="h-2 w-2 rounded-full bg-muted-foreground animate-bounce" />
@@ -344,7 +383,7 @@ export default function Home() {
                 </div>
               </div>
             ))}
-            {/* {isLoading && (
+            {isLoading && (
               <div className="flex w-full justify-start animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="flex max-w-[80%] gap-4 flex-row">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border shadow-sm bg-card border-border">
@@ -359,7 +398,7 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-            )} */}
+            )}
             <div className="h-4" /> {/* Spacer */}
           </div>
 
@@ -371,28 +410,49 @@ export default function Home() {
                   <TooltipTrigger asChild>
                     <div className={`relative ${!isSignedIn || isExtracting ? "cursor-not-allowed opacity-60" : ""}`}>
                       <form onSubmit={handleSendMessage} className={`relative group ${!isSignedIn || isExtracting ? "pointer-events-none" : ""}`}>
-
-                        {/* File Preview */}
-                        {selectedFile && (
-                          <div className="absolute -top-14 left-0 right-0 animate-in slide-in-from-bottom-2 fade-in duration-200">
-                            <div className="flex items-center gap-2 rounded-xl border border-border bg-card p-2 pr-3 shadow-sm w-fit">
-                              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                                <FileText className="h-4 w-4" />
+                        
+                        <div className="absolute bottom-full left-0 right-0 flex flex-col gap-2 pb-2 pointer-events-none">
+                          {/* Error Message */}
+                          {error && (
+                            <div className="animate-in slide-in-from-bottom-2 fade-in duration-200 z-50 pointer-events-auto">
+                              <div className="flex items-center gap-2 rounded-lg border border-red-500/50 bg-red-500/10 p-2 pr-3 shadow-sm w-fit max-w-full backdrop-blur-md">
+                                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-red-500 text-white">
+                                  <X className="h-3 w-3" />
+                                </div>
+                                <span className="text-xs font-medium text-red-600 dark:text-red-400 truncate">{error}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setError(null)}
+                                  className="ml-2 rounded-full p-1 hover:bg-red-500/20 transition-colors"
+                                >
+                                  <X className="h-3 w-3 text-red-600 dark:text-red-400" />
+                                </button>
                               </div>
-                              <div className="flex flex-col">
-                                <span className="text-xs font-medium truncate max-w-[150px]">{selectedFile.name}</span>
-                                <span className="text-[10px] text-muted-foreground">{(selectedFile.size / 1024).toFixed(0)} KB</span>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={removeFile}
-                                className="ml-2 rounded-full p-1 hover:bg-secondary transition-colors"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
                             </div>
-                          </div>
-                        )}
+                          )}
+
+                          {/* File Preview */}
+                          {selectedFile && (
+                            <div className="animate-in slide-in-from-bottom-2 fade-in duration-200 pointer-events-auto">
+                              <div className="flex items-center gap-2 rounded-xl border border-border bg-card p-2 pr-3 shadow-sm w-fit">
+                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                                  <FileText className="h-4 w-4" />
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="text-xs font-medium truncate max-w-[150px]">{selectedFile.name}</span>
+                                  <span className="text-[10px] text-muted-foreground">{(selectedFile.size / 1024).toFixed(0)} KB</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={removeFile}
+                                  className="ml-2 rounded-full p-1 hover:bg-secondary transition-colors"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
 
                         <div className="absolute inset-0 -m-0.5 rounded-2xl bg-linear-to-r from-primary/50 to-purple-500/50 opacity-20 transition-opacity group-hover:opacity-100 blur-sm" />
                         <div className="relative flex items-end gap-2 rounded-2xl border border-border bg-card p-2 shadow-sm focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 transition-all">

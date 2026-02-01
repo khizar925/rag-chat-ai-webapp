@@ -1,21 +1,23 @@
-//api/chat
-
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from "@clerk/nextjs/server";
 import { supabaseAdmin } from '@/lib/supabase';
 
 export async function GET(request: NextRequest) {
     try {
-        const { userId } = await auth();
+        const { searchParams } = new URL(request.url);
+        const chatId = searchParams.get('chatId');
 
-        if (!userId) {
-            return new Response("Unauthorized", { status: 401 });
+        if (!chatId) {
+            return NextResponse.json(
+                { error: 'Missing chatId parameter' },
+                { status: 400 }
+            );
         }
 
         const { data, error } = await supabaseAdmin
-            .from('chats')
-            .select('id, title')
-            .eq("user_id",userId);
+            .from('messages')
+            .select('role, content')
+            .eq('chat_id', chatId)
+            .order('created_at', { ascending: true });
 
         if (error) {
             console.error('Supabase error:', error);

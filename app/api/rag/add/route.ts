@@ -1,5 +1,9 @@
+// /api/rag/add/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import axios from 'axios';
+
+export const config = {
+    runtime: 'edge',
+};
 
 export async function POST(request: NextRequest) {
     try {
@@ -11,21 +15,33 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'RAG_API_URL not configured' }, { status: 500 });
         }
 
-        // Forward to Python backend as query parameters to match the backend signature.
-        const response = await axios.post(`${backendUrl}/add`, null, {
-            params: {
-                text,
-                chat_id,
-                user_id
-            }
+        const params = new URLSearchParams();
+        if (text) params.append('text', text);
+        if (chat_id) params.append('chat_id', chat_id);
+        if (user_id) params.append('user_id', user_id);
+
+        const response = await fetch(`${backendUrl}/add?${params.toString()}`, {
+            method: 'POST',
+            signal: AbortSignal.timeout(30000), // 30 second timeout so it won't hang forever
         });
 
-        return NextResponse.json(response.data);
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('[RAG/add] Backend error:', response.status, errorText);
+            return NextResponse.json(
+                { error: 'Failed to add document', detail: errorText },
+                { status: response.status }
+            );
+        }
+
+        const data = await response.json();
+        return NextResponse.json(data);
+
     } catch (error: any) {
-        console.error('Error forwarding to RAG backend:', error.message);
+        console.error('[RAG/add] Fetch failed:', error.message);
         return NextResponse.json(
-            { error: 'Failed to process document' },
-            { status: error.response?.status || 500 }
+            { error: 'Failed to process document', detail: error.message },
+            { status: 500 }
         );
     }
 }

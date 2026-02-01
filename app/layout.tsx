@@ -23,7 +23,7 @@ const firaCode = Fira_Code({
 });
 
 export const metadata: Metadata = {
-  title: "AI Chat Interface",
+  title: "AskYourDocs",
   description: "Next Generation AI Experience",
 };
 

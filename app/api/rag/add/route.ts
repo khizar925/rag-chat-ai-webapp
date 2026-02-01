@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
 
         const response = await fetch(`${backendUrl}/add?${params.toString()}`, {
             method: 'POST',
-            signal: AbortSignal.timeout(30000), // 30 second timeout so it won't hang forever
+            signal: AbortSignal.timeout(30000),
         });
 
         if (!response.ok) {

@@ -24,6 +24,7 @@ export default function Home() {
   const [recentChats, setRecentChats] = useState<{ id: string, title: string }[]>([]);
   const [reFetchRecentChats, setReFetchRecentChats] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     if (error) {
@@ -32,6 +33,20 @@ export default function Home() {
     }
   }, [error]);
 
+  useEffect(() => {
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (mobile) {
+        setIsSidebarOpen(false);
+      } else {
+        setIsSidebarOpen(true);
+      }
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
 
   const fetchRecentChats = async () => {
@@ -44,6 +59,7 @@ export default function Home() {
   };
 
   const loadChat = async (chatId: string) => {
+    if (isMobile) setIsSidebarOpen(false);
     try {
       setIsLoading(true);
       setCurrentChatId(chatId);
@@ -88,6 +104,7 @@ export default function Home() {
   };
 
   const handleNewChat = () => {
+    if (isMobile) setIsSidebarOpen(false);
     setCurrentChatId(null);
     setMessages([]);
     setDbMessages([]);
@@ -232,13 +249,25 @@ export default function Home() {
   return (
     <div className="flex h-screen bg-background text-foreground font-sans selection:bg-primary selection:text-primary-foreground overflow-hidden">
 
+      {/* Mobile Sidebar Overlay */}
+      {isMobile && isSidebarOpen && (
+        <div 
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
       <aside
-        className={`${isSidebarOpen ? "w-64" : "w-[72px]"
-          } relative flex flex-col border-r border-border bg-card transition-all duration-300 ease-in-out shrink-0`}
+        className={`
+          ${isMobile ? "fixed inset-y-0 left-0 z-50 h-full border-r shadow-2xl" : "relative shrink-0 border-r"}
+          ${isSidebarOpen ? "w-64" : (isMobile ? "w-64 -translate-x-full" : "w-[72px]")}
+          ${isMobile && !isSidebarOpen ? "-translate-x-full" : "translate-x-0"}
+          bg-card transition-all duration-300 ease-in-out flex flex-col border-border
+        `}
       >
         <div className="flex h-16 items-center justify-between px-4 border-b border-border/50">
-          <div className={`flex items-center gap-2 overflow-hidden ${!isSidebarOpen && "hidden"}`}>
+          <div className={`flex items-center gap-2 overflow-hidden ${!isSidebarOpen && !isMobile && "hidden"}`}>
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <FileText className="h-5 w-5 fill-current" />
             </div>
@@ -254,22 +283,22 @@ export default function Home() {
 
         <div className="p-3">
           <button onClick={handleNewChat}
-            className={`flex w-full items-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 transition-all ${!isSidebarOpen && "justify-center px-0"}`}
+            className={`flex w-full items-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 transition-all ${!isSidebarOpen && !isMobile && "justify-center px-0"}`}
           >
             <Plus className="h-5 w-5" />
-            {isSidebarOpen &&
+            {(isSidebarOpen || isMobile) &&
               <span>New Chat</span>}
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {isSidebarOpen && <h4 className="text-xs font-medium text-muted-foreground px-2 mb-2">Recent Chats</h4>}
+          {(isSidebarOpen || isMobile) && <h4 className="text-xs font-medium text-muted-foreground px-2 mb-2">Recent Chats</h4>}
 
           {/* Empty State for Chats */}
-          {recentChats.length === 0 || !isSidebarOpen ? (
+          {recentChats.length === 0 || (!isSidebarOpen && !isMobile) ? (
             <div className="flex flex-col items-center justify-center py-8 text-center px-2">
               <MessageSquare className="h-8 w-8 text-muted-foreground/50 mb-2" />
-              {isSidebarOpen && (
+              {(isSidebarOpen || isMobile) && (
                 <p className="text-xs text-muted-foreground">No recent chats</p>
               )}
             </div>
@@ -290,7 +319,7 @@ export default function Home() {
         {/* User Profile Footer */}
         <div className="p-3 border-t border-border/50">
           <SignedIn>
-            <div className={`flex items-center gap-3 rounded-lg p-2 hover:bg-secondary/50 transition-colors ${!isSidebarOpen && "justify-center"}`}>
+            <div className={`flex items-center gap-3 rounded-lg p-2 hover:bg-secondary/50 transition-colors ${!isSidebarOpen && !isMobile && "justify-center"}`}>
               <UserButton
                 appearance={{
                   elements: {
@@ -299,7 +328,7 @@ export default function Home() {
                   }
                 }}
               />
-              {isSidebarOpen && (
+              {(isSidebarOpen || isMobile) && (
                 <div className="flex flex-col overflow-hidden text-left">
                   <span className="text-sm font-medium truncate">
                     {user?.fullName || user?.username || "User"}
@@ -312,15 +341,15 @@ export default function Home() {
             </div>
           </SignedIn>
           <SignedOut>
-            <div className={`flex justify-center ${isSidebarOpen ? "w-full" : ""}`}>
+            <div className={`flex justify-center ${isSidebarOpen || isMobile ? "w-full" : ""}`}>
               <SignInButton mode="modal">
                 <button
-                  className={`flex items-center gap-2 rounded-lg p-2 hover:bg-secondary transition-colors text-sm font-medium ${isSidebarOpen ? "w-full justify-start" : "justify-center"}`}
+                  className={`flex items-center gap-2 rounded-lg p-2 hover:bg-secondary transition-colors text-sm font-medium ${isSidebarOpen || isMobile ? "w-full justify-start" : "justify-center"}`}
                 >
                   <div className="h-9 w-9 flex items-center justify-center rounded-full bg-secondary">
                     <LogOut className="h-4 w-4" />
                   </div>
-                  {isSidebarOpen && <span>Sign In</span>}
+                  {(isSidebarOpen || isMobile) && <span>Sign In</span>}
                 </button>
               </SignInButton>
             </div>
@@ -329,11 +358,19 @@ export default function Home() {
       </aside>
 
       {/* Main Content */}
-      <div className="flex flex-1 flex-col overflow-hidden relative">
+      <div className="flex flex-1 flex-col overflow-hidden relative w-full">
         {/* Mobile Header / Top Bar */}
-        <header className="flex h-16 w-full items-center justify-between border-b border-border bg-background px-6 shrink-0">
+        <header className="flex h-16 w-full items-center justify-between border-b border-border bg-background px-4 md:px-6 shrink-0">
           <div className="flex items-center gap-3">
-            {!isSidebarOpen && (
+            {/* Mobile Toggle Button */}
+            {isMobile && !isSidebarOpen && (
+               <button onClick={() => setIsSidebarOpen(true)} className="p-2 -ml-2 rounded-md hover:bg-secondary text-muted-foreground">
+                 <Menu className="h-5 w-5" />
+               </button>
+             )}
+
+            {/* Logo */}
+            {(!isSidebarOpen || isMobile) && (
               <div className="flex items-center gap-3 group cursor-pointer animate-in fade-in zoom-in duration-300">
                 <div className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg bg-primary text-primary-foreground">
                   <FileText className="h-5 w-5 fill-current" />
@@ -347,9 +384,9 @@ export default function Home() {
         {/* Chat Area */}
         <main className="flex-1 overflow-hidden relative flex flex-col">
           {/* Messages */}
-          <div ref={messagesContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide p-4 md:p-8 space-y-6 scroll-smooth">
+          <div ref={messagesContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide p-2 md:p-8 space-y-6 scroll-smooth">
             {messages.length === 0 && (
-              <div className="flex h-full flex-col items-center justify-center text-center opacity-50">
+              <div className="flex h-full flex-col items-center justify-center text-center opacity-50 px-4">
                 <FileText className="mb-4 h-16 w-16 text-muted-foreground" />
                 <h3 className="text-2xl font-bold tracking-tight">Ask anything about your documents</h3>
                 <p className="text-base text-muted-foreground mt-2 max-w-lg">Upload a file to get started or type a query below to explore your data.</p>
@@ -361,7 +398,7 @@ export default function Home() {
                 key={idx}
                 className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-4 duration-500`}
               >
-                <div className={`flex max-w-[90%] md:max-w-[80%] gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                <div className={`flex max-w-[90%] md:max-w-[80%] gap-3 md:gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
 
                   {/* Avatar */}
                   <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border shadow-sm ${msg.role === 'user' ? 'bg-foreground text-background border-transparent' : 'bg-card border-border'}`}>
@@ -369,7 +406,7 @@ export default function Home() {
                   </div>
 
                   {/* Bubble */}
-                  <div className={`group relative rounded-2xl px-5 py-3.5 text-sm leading-relaxed shadow-sm ${msg.role === 'user'
+                  <div className={`group relative rounded-2xl px-4 py-3 md:px-5 md:py-3.5 text-sm leading-relaxed shadow-sm ${msg.role === 'user'
                     ? 'bg-primary text-primary-foreground rounded-tr-sm'
                     : 'bg-card text-card-foreground border border-border rounded-tl-sm'
                     }`}>
@@ -413,7 +450,7 @@ export default function Home() {
           </div>
 
           {/* Input Area */}
-          <div className="w-full p-4 md:p-6 bg-background border-t border-border/50">
+          <div className="w-full p-3 md:p-6 bg-background border-t border-border/50">
             <div className="mx-auto max-w-2xl w-full">
               <TooltipProvider>
                 <Tooltip>
@@ -444,12 +481,12 @@ export default function Home() {
                           {/* File Preview */}
                           {selectedFile && (
                             <div className="animate-in slide-in-from-bottom-2 fade-in duration-200 pointer-events-auto">
-                              <div className="flex items-center gap-2 rounded-xl border border-border bg-card p-2 pr-3 shadow-sm w-fit">
-                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                              <div className="flex items-center gap-2 rounded-xl border border-border bg-card p-2 pr-3 shadow-sm w-fit max-w-full">
+                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                                   <FileText className="h-4 w-4" />
                                 </div>
-                                <div className="flex flex-col">
-                                  <span className="text-xs font-medium truncate max-w-[150px]">{selectedFile.name}</span>
+                                <div className="flex flex-col overflow-hidden">
+                                  <span className="text-xs font-medium truncate max-w-[150px] md:max-w-[200px]">{selectedFile.name}</span>
                                   <span className="text-[10px] text-muted-foreground">{(selectedFile.size / 1024).toFixed(0)} KB</span>
                                 </div>
                                 <button
@@ -480,7 +517,7 @@ export default function Home() {
                             type="button"
                             onClick={() => fileInputRef.current?.click()}
                             disabled={!isSignedIn}
-                            className="flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed"
+                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed"
                           >
                             <Paperclip className="h-5 w-5" />
                           </button>
@@ -491,13 +528,13 @@ export default function Home() {
                             onChange={(e) => setInputValue(e.target.value)}
                             placeholder={isSignedIn ? "Ask your docs..." : "Sign in to chat..."}
                             disabled={!isSignedIn}
-                            className="flex-1 bg-transparent px-2 py-2.5 text-sm font-medium placeholder:text-muted-foreground/70 focus:outline-none font-mono disabled:cursor-not-allowed"
+                            className="flex-1 bg-transparent px-2 py-2.5 text-sm font-medium placeholder:text-muted-foreground/70 focus:outline-none font-mono disabled:cursor-not-allowed min-w-0"
                           />
 
                           <button
                             type="submit"
                             disabled={!isSignedIn || isExtracting || (!inputValue.trim() && !selectedFile)}
-                            className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md transition-all hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 active:scale-95"
+                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-md transition-all hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed hover:scale-105 active:scale-95"
                             title={isExtracting ? "Reading document…" : undefined}
                           >
                             {isExtracting ? (

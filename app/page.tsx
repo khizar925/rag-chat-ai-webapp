@@ -79,8 +79,22 @@ export default function Home() {
   }, [messages]);
 
   useEffect(() => {
-    fetchRecentChats();
-  }, [reFetchRecentChats]);
+    if (isSignedIn) {  // Only fetch when signed in
+      fetchRecentChats();
+    }
+  }, [reFetchRecentChats, isSignedIn]);
+
+  useEffect(() => {
+    if (!isSignedIn) {
+      // Clear all chat-related state when user logs out
+      setRecentChats([]);
+      setMessages([]);
+      setDbMessages([]);
+      setCurrentChatId(null);
+      setSelectedFile(null);
+      setInputValue("");
+    }
+  }, [isSignedIn]);
 
 
   function generateUniqueId(): string {
@@ -251,7 +265,7 @@ export default function Home() {
 
       {/* Mobile Sidebar Overlay */}
       {isMobile && isSidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
           onClick={() => setIsSidebarOpen(false)}
         />
@@ -317,44 +331,46 @@ export default function Home() {
         </div>
 
         {/* User Profile Footer */}
-        <div className="p-3 border-t border-border/50">
-          <SignedIn>
-            <div className={`flex items-center gap-3 rounded-lg p-2 hover:bg-secondary/50 transition-colors ${!isSidebarOpen && !isMobile && "justify-center"}`}>
-              <UserButton
-                appearance={{
-                  elements: {
-                    userButtonAvatarBox: "h-9 w-9 border border-border",
-                    userButtonOuterIdentifier: "hidden"
-                  }
-                }}
-              />
-              {(isSidebarOpen || isMobile) && (
-                <div className="flex flex-col overflow-hidden text-left">
-                  <span className="text-sm font-medium truncate">
-                    {user?.fullName || user?.username || "User"}
-                  </span>
-                  <span className="text-xs text-muted-foreground truncate w-32">
-                    {user?.primaryEmailAddress?.emailAddress}
-                  </span>
-                </div>
-              )}
-            </div>
-          </SignedIn>
-          <SignedOut>
-            <div className={`flex justify-center ${isSidebarOpen || isMobile ? "w-full" : ""}`}>
-              <SignInButton mode="modal">
-                <button
-                  className={`flex items-center gap-2 rounded-lg p-2 hover:bg-secondary transition-colors text-sm font-medium ${isSidebarOpen || isMobile ? "w-full justify-start" : "justify-center"}`}
-                >
-                  <div className="h-9 w-9 flex items-center justify-center rounded-full bg-secondary">
-                    <LogOut className="h-4 w-4" />
+        {!isMobile && (
+          <div className="p-3 border-t border-border/50">
+            <SignedIn>
+              <div className={`flex items-center gap-3 rounded-lg p-2 hover:bg-secondary/50 transition-colors ${!isSidebarOpen && !isMobile && "justify-center"}`}>
+                <UserButton
+                  appearance={{
+                    elements: {
+                      userButtonAvatarBox: "h-9 w-9 border border-border",
+                      userButtonOuterIdentifier: "hidden"
+                    }
+                  }}
+                />
+                {(isSidebarOpen || isMobile) && (
+                  <div className="flex flex-col overflow-hidden text-left">
+                    <span className="text-sm font-medium truncate">
+                      {user?.fullName || user?.username || "User"}
+                    </span>
+                    <span className="text-xs text-muted-foreground truncate w-32">
+                      {user?.primaryEmailAddress?.emailAddress}
+                    </span>
                   </div>
-                  {(isSidebarOpen || isMobile) && <span>Sign In</span>}
-                </button>
-              </SignInButton>
-            </div>
-          </SignedOut>
-        </div>
+                )}
+              </div>
+            </SignedIn>
+            <SignedOut>
+              <div className={`flex justify-center ${isSidebarOpen || isMobile ? "w-full" : ""}`}>
+                <SignInButton mode="modal">
+                  <button
+                    className={`flex items-center gap-2 rounded-lg p-2 hover:bg-secondary transition-colors text-sm font-medium ${isSidebarOpen || isMobile ? "w-full justify-start" : "justify-center"}`}
+                  >
+                    <div className="h-9 w-9 flex items-center justify-center rounded-full bg-secondary">
+                      <LogOut className="h-4 w-4" />
+                    </div>
+                    {(isSidebarOpen || isMobile) && <span>Sign In</span>}
+                  </button>
+                </SignInButton>
+              </div>
+            </SignedOut>
+          </div>
+        )}
       </aside>
 
       {/* Main Content */}
@@ -364,10 +380,10 @@ export default function Home() {
           <div className="flex items-center gap-3">
             {/* Mobile Toggle Button */}
             {isMobile && !isSidebarOpen && (
-               <button onClick={() => setIsSidebarOpen(true)} className="p-2 -ml-2 rounded-md hover:bg-secondary text-muted-foreground">
-                 <Menu className="h-5 w-5" />
-               </button>
-             )}
+              <button onClick={() => setIsSidebarOpen(true)} className="p-2 -ml-2 rounded-md hover:bg-secondary text-muted-foreground">
+                <Menu className="h-5 w-5" />
+              </button>
+            )}
 
             {/* Logo */}
             {(!isSidebarOpen || isMobile) && (
@@ -379,6 +395,29 @@ export default function Home() {
               </div>
             )}
           </div>
+
+          {/* Mobile User Profile */}
+          {isMobile && (
+            <div className="flex items-center gap-3">
+              <SignedIn>
+                <UserButton
+                  appearance={{
+                    elements: {
+                      userButtonAvatarBox: "h-9 w-9 border border-border",
+                      userButtonOuterIdentifier: "hidden"
+                    }
+                  }}
+                />
+              </SignedIn>
+              <SignedOut>
+                <SignInButton mode="modal">
+                  <button className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors">
+                    Log in
+                  </button>
+                </SignInButton>
+              </SignedOut>
+            </div>
+          )}
         </header>
 
         {/* Chat Area */}
